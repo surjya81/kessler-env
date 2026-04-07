@@ -11,14 +11,13 @@ try:
 except ImportError:
     from models import KesslerAction, KesslerObservation, ThrusterBurn, SatelliteTelemetry, DebrisTelemetry
 
-
 # --- Orbital Constants ---
-GM = 1000.0          # Gravitational constant * Earth Mass (simplified)
-DT = 1.0             # Time step
-COLLISION_DIST = 2.0 # Proximity threshold for destruction
-EARTH_RADIUS = 20.0  # Atmospheric crash limit
-MAX_STEPS = 200
-
+GM = 1000.0          
+DT = 1.0             
+COLLISION_DIST = 2.0 
+EARTH_RADIUS = 20.0  
+MAX_STEPS = 50       # Capped for 20-min hackathon inference limit
+NUM_SATELLITES = 3
 
 class KesslerEnvironment(Environment):
     SUPPORTS_CONCURRENT_SESSIONS = True
@@ -27,24 +26,19 @@ class KesslerEnvironment(Environment):
         self._state = State(episode_id=str(uuid4()), step_count=0)
         self.satellites = []
         self.debris =[]
-        self.cumulative_reward = 0.0
 
     def _generate_circular_orbit(self, radius: float):
         angle = np.random.uniform(0, 2 * math.pi)
         x = radius * math.cos(angle)
         y = radius * math.sin(angle)
-        v = math.sqrt(GM / radius) # Orbital velocity formula
-        vx = -v * math.sin(angle)
-        vy = v * math.cos(angle)
-        return x, y, vx, vy
+        v = math.sqrt(GM / radius)
+        return x, y, -v * math.sin(angle), v * math.cos(angle)
 
     def reset(self) -> KesslerObservation:
         self._state = State(episode_id=str(uuid4()), step_count=0)
-        self.cumulative_reward = 0.0
         self.satellites =[]
         
-        # Spawn 3 controlled satellites
-        for i in range(3):
+        for i in range(NUM_SATELLITES):
             r = np.random.uniform(50, 80)
             x, y, vx, vy = self._generate_circular_orbit(r)
             self.satellites.append({
@@ -52,14 +46,15 @@ class KesslerEnvironment(Environment):
                 "fuel": 100.0, "status": "active"
             })
 
-        # Spawn 30 pieces of space debris with slightly erratic orbits
         self.debris =[]
         for i in range(30):
             r = np.random.uniform(40, 90)
             x, y, vx, vy = self._generate_circular_orbit(r)
-            vx += np.random.uniform(-0.5, 0.5)
-            vy += np.random.uniform(-0.5, 0.5)
-            self.debris.append({"id": i, "x": x, "y": y, "vx": vx, "vy": vy})
+            self.debris.append({
+                "id": i, "x": x, "y": y, 
+                "vx": vx + np.random.uniform(-0.5, 0.5), 
+                "vy": vy + np.random.uniform(-0.5, 0.5)
+            })
 
         obs = self._get_observation([])
         obs.done = False
@@ -67,18 +62,14 @@ class KesslerEnvironment(Environment):
         return obs
 
     def _apply_gravity(self, obj: dict) -> bool:
-        """Calculates gravity vector. Returns False if object crashed into Earth."""
         r_sq = obj['x']**2 + obj['y']**2
         r = math.sqrt(r_sq)
         if r < EARTH_RADIUS:
             return False 
         
         a = -GM / r_sq
-        ax = a * (obj['x'] / r)
-        ay = a * (obj['y'] / r)
-        
-        obj['vx'] += ax * DT
-        obj['vy'] += ay * DT
+        obj['vx'] += (a * (obj['x'] / r)) * DT
+        obj['vy'] += (a * (obj['y'] / r)) * DT
         obj['x'] += obj['vx'] * DT
         obj['y'] += obj['vy'] * DT
         return True
@@ -86,7 +77,6 @@ class KesslerEnvironment(Environment):
     def step(self, action: KesslerAction) -> KesslerObservation:  # type: ignore[override]
         self._state.step_count += 1
         alerts =[]
-        step_reward = 0.0
 
         # 1. Apply Actions (Thruster burns)
         for burn in action.burns:
@@ -100,20 +90,15 @@ class KesslerEnvironment(Environment):
                     sat['vx'] += dvx
                     sat['vy'] += dvy
                     sat['fuel'] -= fuel_cost
-                    step_reward -= fuel_cost * 0.1 # Minor penalty for wasting fuel
                 else:
                     alerts.append(f"Sat {sat['id']} failed burn: Insufficient fuel.")
 
         # 2. Physics & Gravity Update
         for sat in self.satellites:
             if sat['status'] == 'active':
-                survived = self._apply_gravity(sat)
-                if not survived:
+                if not self._apply_gravity(sat):
                     sat['status'] = 'destroyed'
                     alerts.append(f"Sat {sat['id']} orbit decayed! Crashed into Earth.")
-                    step_reward -= 500.0
-                else:
-                    step_reward += 1.0 # Base survival reward
 
         for d in self.debris:
             self._apply_gravity(d)
@@ -127,23 +112,21 @@ class KesslerEnvironment(Environment):
                 if dist < COLLISION_DIST:
                     sat['status'] = 'destroyed'
                     alerts.append(f"CRITICAL: Sat {sat['id']} collided with Debris {d['id']}!")
-                    step_reward -= 1000.0
-                    
-                    # The Kessler Effect: A collision creates 3 new pieces of debris
-                    for _ in range(3):
+                    # Cascade Effect
+                    for _ in range(2):
                         self.debris.append({
-                            "id": len(self.debris),
-                            "x": sat['x'], "y": sat['y'],
+                            "id": len(self.debris), "x": sat['x'], "y": sat['y'],
                             "vx": sat['vx'] + np.random.uniform(-1, 1),
                             "vy": sat['vy'] + np.random.uniform(-1, 1)
                         })
                     break 
 
-        self.cumulative_reward += step_reward
-        
-        # 4. Check Terminal Condition
-        all_destroyed = all(s['status'] == 'destroyed' for s in self.satellites)
-        is_done = all_destroyed or (self._state.step_count >= MAX_STEPS)
+        # 4. Calculate Step Reward (0.0 to 1.0 Normalization)
+        # Agent gets a fractional reward for each satellite surviving this step.
+        active_sats = sum(1 for s in self.satellites if s['status'] == 'active')
+        step_reward = (active_sats / float(NUM_SATELLITES)) * (1.0 / float(MAX_STEPS))
+
+        is_done = (active_sats == 0) or (self._state.step_count >= MAX_STEPS)
 
         obs = self._get_observation(alerts)
         obs.done = is_done
@@ -155,7 +138,6 @@ class KesslerEnvironment(Environment):
             satellites=[SatelliteTelemetry(**s) for s in self.satellites],
             radar_debris=[DebrisTelemetry(**d) for d in self.debris],
             critical_alerts=alerts,
-            total_score=self.cumulative_reward,
             done=False,
             reward=0.0
         )
