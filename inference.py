@@ -45,7 +45,7 @@ from openai import OpenAI
 import numpy as np
 from PIL import Image
 
-from browsergym_env import BrowserGymAction, BrowserGymEnv
+from kessler_env import KesslerAction, KesslerEnv
 
 API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
@@ -202,7 +202,7 @@ def parse_model_action(response_text: str) -> str:
 def main() -> None:
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
-    env = BrowserGymEnv.from_docker_image(
+    env = KesslerEnv.from_docker_image(
         image="browsergym-env:latest",
         env_vars={
             "BROWSERGYM_BENCHMARK": BENCHMARK,
@@ -262,7 +262,7 @@ def main() -> None:
                     print(f"[DEBUG] Model request failed: {exc}", flush=True)
 
             action_str = parse_model_action(response_text)
-            result = env.step(BrowserGymAction(action_str=action_str))
+            result = env.step(KesslerAction(action_str=action_str))
             observation = result.observation
 
             reward = result.reward or 0.0
