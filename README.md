@@ -1,5 +1,5 @@
 ---
-title: Kessler Env Environment Server
+title: Kessler Env Environment Server 
 emoji: 🛰️
 colorFrom: indigo
 colorTo: purple
@@ -133,7 +133,7 @@ python inference.py
 
 ### Connecting to a Running Space
 
-```python
+```pyt
 from kessler_env import KesslerEnv, KesslerAction
 
 with KesslerEnv(base_url="https://<your-space>.hf.space") as env:
