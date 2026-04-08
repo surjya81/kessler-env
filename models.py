@@ -48,7 +48,11 @@ class DebrisTelemetry(BaseModel):
 
 class KesslerObservation(Observation):
     """Observation returning orbital telemetry and alerts."""
+    mission_objective: str = Field(default="", description="The goal for the current episode")
+    target_radius: float = Field(default=0.0, description="If greater than 0, navigate Sat 0 to this orbital radius")
     satellites: List[SatelliteTelemetry] = Field(..., description="Telemetry of your controlled satellites")
     radar_debris: List[DebrisTelemetry] = Field(..., description="Tracked debris locations and velocities")
     critical_alerts: List[str] = Field(default_factory=list, description="Alerts such as collisions or low fuel")
+    done: bool = False
+    reward: float = 0.0
     total_score: float = Field(default=0.0, description="Cumulative mission score")
