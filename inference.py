@@ -68,6 +68,7 @@ API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o")
 BENCHMARK = os.getenv("BENCHMARK", "kessler-env")
 MAX_STEPS = 50
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
 # Grader requires scores strictly inside (0, 1) — not 0.0 and not 1.0.
 # This epsilon is added as a floor after summing rewards so that a run that

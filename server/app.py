@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 load_dotenv()
 import os
 print("ENABLE_WEB_INTERFACE =", os.getenv("ENABLE_WEB_INTERFACE"))
+print("Logger Level: ", os.getenv("LOG_LEVEL"))
 
 try:
     from openenv.core.env_server.http_server import create_app
