@@ -74,7 +74,7 @@ LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 # This epsilon is added as a floor after summing rewards so that a run that
 # scores zero still emits a value > 0, and the environment's reward scaling
 # already ensures the ceiling never reaches 1.0.
-_SCORE_EPSILON = 1e-4
+_SCORE_EPSILON = 1e-3  # Raised to prevent .3f string formatting rounding it to 0.000 / 1.000
 
 MAX_TOTAL_REWARD = 1.0
 SUCCESS_SCORE_THRESHOLD = 0.1

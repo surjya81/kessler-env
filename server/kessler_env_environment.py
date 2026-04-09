@@ -31,7 +31,7 @@ NUM_SATELLITES = 3
 # The environment adds this as a floor so that even a fully-destroyed run
 # emits a non-zero score, and the ceiling prevents a perfect run from
 # reaching exactly 1.0.
-_SCORE_EPSILON = 1e-4
+_SCORE_EPSILON = 1e-3
 
 
 class KesslerEnvironment(Environment):
@@ -223,12 +223,13 @@ class KesslerEnvironment(Environment):
 
         # Task 2 – RENDEZVOUS: proximity bonus for Sat 0
         elif self.current_task_idx == 2:
+            step_reward /= 2.0  # Shrink base to accommodate for proximity bonus
             sat0 = next((s for s in self.satellites if s['id'] == 0 and s['status'] == 'active'), None)
             if sat0:
                 r0 = math.sqrt(sat0['x'] ** 2 + sat0['y'] ** 2)
                 proximity = max(0.0, 1.0 - abs(r0 - self.target_radius) / 30.0)
                 # Extra reward capped at the same per-step budget
-                step_reward += proximity * ((1.0 - 2 * _SCORE_EPSILON) / float(MAX_STEPS))
+                step_reward += (proximity * ((1.0 - 2 * _SCORE_EPSILON) / float(MAX_STEPS))) / 2.0
                 logger.debug(
                     "step %d RENDEZVOUS sat0_r=%.2f target=%.2f proximity=%.4f step_reward=%.6f",
                     step, r0, self.target_radius, proximity, step_reward,

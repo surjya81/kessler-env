@@ -20,61 +20,46 @@ class KesslerEnv(
 ):
     """
     Client for the Kessler Env Environment.
-
-    This client maintains a persistent WebSocket connection to the environment server,
-    enabling efficient multi-step interactions with lower latency.
-    Each client instance has its own dedicated environment session on the server.
-
-    Example:
-        >>> # Connect to a running server
-        >>> with KesslerEnv(base_url="http://localhost:8000") as client:
-        ...     result = client.reset()
-        ...     print(result.observation.echoed_message)
-        ...
-        ...     result = client.step(KesslerAction(message="Hello!"))
-        ...     print(result.observation.echoed_message)
-
-    Example with Docker:
-        >>> # Automatically start container and connect
-        >>> client = KesslerEnv.from_docker_image("kessler_env-env:latest")
-        >>> try:
-        ...     result = client.reset()
-        ...     result = client.step(KesslerAction(message="Test"))
-        ... finally:
-        ...     client.close()
     """
 
     def _step_payload(self, action: KesslerAction) -> Dict:
         """
         Convert KesslerAction to JSON payload for step message.
-
-        Args:
-            action: KesslerAction instance
-
-        Returns:
-            Dictionary representation suitable for JSON encoding
         """
         return {
-            "message": action.message,
+            "burns":[
+                {
+                    "satellite_id": b.satellite_id,
+                    "delta_vx": b.delta_vx,
+                    "delta_vy": b.delta_vy
+                }
+                for b in action.burns
+            ]
         }
 
     def _parse_result(self, payload: Dict) -> StepResult[KesslerObservation]:
         """
         Parse server response into StepResult[KesslerObservation].
-
-        Args:
-            payload: JSON response data from server
-
-        Returns:
-            StepResult with KesslerObservation
         """
         obs_data = payload.get("observation", {})
+        # Safely extract and fallback in case the server returns `null`
+        reward_val = payload.get("reward")
+        if reward_val is None:
+            reward_val = obs_data.get("reward", 0.0)
+
+        done_val = payload.get("done")
+        if done_val is None:
+            done_val = obs_data.get("done", False)
+
         observation = KesslerObservation(
-            echoed_message=obs_data.get("echoed_message", ""),
-            message_length=obs_data.get("message_length", 0),
+            mission_objective=obs_data.get("mission_objective", ""),
+            target_radius=obs_data.get("target_radius", 0.0),
+            satellites=obs_data.get("satellites",[]),
+            radar_debris=obs_data.get("radar_debris",[]),
+            critical_alerts=obs_data.get("critical_alerts",[]),
             done=payload.get("done", False),
-            reward=payload.get("reward"),
-            metadata=obs_data.get("metadata", {}),
+            reward=payload.get("reward", 0.0),
+            total_score=obs_data.get("total_score", 0.0),
         )
 
         return StepResult(
@@ -86,12 +71,6 @@ class KesslerEnv(
     def _parse_state(self, payload: Dict) -> State:
         """
         Parse server response into State object.
-
-        Args:
-            payload: JSON response from state request
-
-        Returns:
-            State object with episode_id and step_count
         """
         return State(
             episode_id=payload.get("episode_id"),
