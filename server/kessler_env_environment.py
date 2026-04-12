@@ -17,6 +17,10 @@ try:
     from logger import get_logger
 except ImportError:
     from .logger import get_logger  # type: ignore
+try:
+    from .judge import get_judge
+except ImportError:
+    from judge import get_judge
 
 logger = get_logger(__name__)
 
@@ -55,6 +59,7 @@ class KesslerEnvironment(Environment):
         self.satellites = []
         self.debris = []
         self.episode_count = 0  # Tracks difficulty tier
+        self.total_score = 0.0
         logger.info("KesslerEnvironment initialised")
 
     def _generate_circular_orbit(self, radius: float):
@@ -67,6 +72,7 @@ class KesslerEnvironment(Environment):
     def reset(self) -> KesslerObservation:
         self._state = State(episode_id=str(uuid4()), step_count=0)
         self.satellites = []
+        self.total_score = 0.0
 
         # Escalate difficulty on each reset (0: Easy, 1: Medium, 2: Hard)
         self.current_task_idx = self.episode_count % 3
@@ -138,6 +144,12 @@ class KesslerEnvironment(Environment):
         self._state.step_count += 1
         step = self._state.step_count
         alerts = []
+
+        judge = get_judge()
+        obs_before = None
+        if judge.enabled:
+            # We convert it to a dict so it's clean for the JSON prompt
+            obs_before = self._get_observation([]).model_dump()
 
         logger.debug("step %d — burns received: %d", step, len(action.burns))
 
@@ -229,10 +241,6 @@ class KesslerEnvironment(Environment):
             initial_fuel = NUM_SATELLITES * 50.0
             fuel_frac = max(0.0, current_fuel / initial_fuel)
             step_reward *= fuel_frac
-            logger.debug(
-                "step %d ECO-STATION fuel_frac=%.4f step_reward=%.6f",
-                step, fuel_frac, step_reward,
-            )
 
         # Task 2 – RENDEZVOUS: proximity bonus for Sat 0
         elif self.current_task_idx == 2:
@@ -241,12 +249,23 @@ class KesslerEnvironment(Environment):
             if sat0:
                 r0 = math.sqrt(sat0['x'] ** 2 + sat0['y'] ** 2)
                 proximity = max(0.0, 1.0 - abs(r0 - self.target_radius) / 30.0)
-                # Extra reward capped at the same per-step budget
                 step_reward += (proximity * ((1.0 - 2 * _SCORE_EPSILON) / float(MAX_STEPS))) / 2.0
-                logger.debug(
-                    "step %d RENDEZVOUS sat0_r=%.2f target=%.2f proximity=%.4f step_reward=%.6f",
-                    step, r0, self.target_radius, proximity, step_reward,
-                )
+
+        # --- JUDGE: Evaluate and Scale Reward ---
+        if judge.enabled and obs_before is not None:
+            # Capture state after physics
+            obs_after = self._get_observation(alerts).model_dump()
+            action_dump = action.model_dump()
+            
+            judge_score, judge_reason = judge.evaluate(obs_before, action_dump, obs_after)
+            
+            # Apply mathematical scaling.
+            # Divide base limit by 1.2, then multiply by max 1.2 to safely return to original ceiling.
+            step_reward /= 1.2
+            step_reward *= (1.0 + (0.2 * judge_score))
+            
+            # Feed the reasoning back to the agent through critical alerts!
+            alerts.append(f"[JUDGE]: {judge_reason} (Score: {judge_score:.2f})")
 
         is_done = (active_sats == 0) or (self._state.step_count >= MAX_STEPS)
 
@@ -254,10 +273,11 @@ class KesslerEnvironment(Environment):
             "step %d — active_sats=%d/%d step_reward=%.6f done=%s alerts=%d",
             step, active_sats, NUM_SATELLITES, step_reward, is_done, len(alerts),
         )
-
+        self.total_score += step_reward
         obs = self._get_observation(alerts)
         obs.done = is_done
         obs.reward = step_reward
+        obs.total_score = min(self.total_score, 1.0 - _SCORE_EPSILON)
         return obs
 
     def _get_observation(self, alerts: list) -> KesslerObservation:

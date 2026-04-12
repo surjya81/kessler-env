@@ -26,18 +26,20 @@ def _configure_root_logger() -> None:
     level = getattr(logging, raw_level, logging.WARNING)
 
     root = logging.getLogger("kessler")
-    if root.handlers:
-        # Already configured (e.g. imported twice)
-        return
+    root.setLevel(level)        # always force — don't guard this
+    root.propagate = False      # always isolate from uvicorn's root
 
-    root.setLevel(level)
+    if not any(getattr(h, '_kessler_handler', False) for h in root.handlers):
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setLevel(level)
+        handler.setFormatter(_build_formatter())
+        handler._kessler_handler = True
+        root.addHandler(handler)
+    else:
+        for h in root.handlers:
+            if getattr(h, '_kessler_handler', False):
+                h.setLevel(level)   # re-sync level if dictConfig reset it
 
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setLevel(level)
-    handler.setFormatter(_build_formatter())
-    root.addHandler(handler)
-
-    # Silence noisy third-party loggers unless we're in DEBUG
     if level > logging.DEBUG:
         for noisy in ("websockets", "asyncio", "httpcore", "httpx", "openai"):
             logging.getLogger(noisy).setLevel(logging.ERROR)

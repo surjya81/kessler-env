@@ -28,10 +28,15 @@ Usage:
     python -m server.app
 """
 from dotenv import load_dotenv
+from fastapi.responses import JSONResponse
 load_dotenv()
 import os
-print("ENABLE_WEB_INTERFACE =", os.getenv("ENABLE_WEB_INTERFACE"))
-print("Logger Level: ", os.getenv("LOG_LEVEL"))
+
+import sys
+print(f"ENABLE_WEB_INTERFACE={os.getenv('ENABLE_WEB_INTERFACE')}", file=sys.stderr)
+print(f"LOG_LEVEL={os.getenv('LOG_LEVEL')}", file=sys.stderr)
+print(f"ENABLE_JUDGE={os.getenv('ENABLE_JUDGE')}", file=sys.stderr)
+
 
 try:
     from openenv.core.env_server.http_server import create_app
@@ -57,6 +62,18 @@ app = create_app(
     max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
 )
 
+@app.get("/manifest.json")
+async def manifest():
+    return JSONResponse({
+        "name": "Kessler Env",
+        "short_name": "Kessler Env",
+        "description": "Orbital traffic control simulation environment",
+        "start_url": "/web",
+        "display": "standalone",
+        "background_color": "#0f0f1a",
+        "theme_color": "#6366f1",
+        "icons": []
+    })
 
 def main(host: str = "0.0.0.0", port: int = 8000):
     """
