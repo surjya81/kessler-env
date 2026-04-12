@@ -216,7 +216,7 @@ http://localhost:8000/docs
 
 ## WebSocket — Persistent Sessions
 
-The REST endpoints create a new environment instance per call, which is fine for casual exploration. For running a full episode (50 steps) without overhead, use the WebSocket endpoint instead. It keeps a single stateful session open.
+The REST endpoints and WebSocket share the same singleton environment instance. For casual step-by-step exploration, REST is fine. For running a full episode (50 steps) without the overhead of individual HTTP requests, use the WebSocket endpoint — it keeps a single stateful connection open for the duration.
 
 ```
 ws://localhost:8000/ws

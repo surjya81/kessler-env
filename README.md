@@ -363,18 +363,19 @@ kessler_env/
 ├── models.py                       # KesslerAction & KesslerObservation Pydantic schemas
 ├── client.py                       # KesslerEnv sync client (EnvClient wrapper)
 ├── logger.py                       # Centralised logger (LOG_LEVEL from .env)
-├── judge.py                        # LLM-as-Judge maneuver evaluator (optional)
 ├── Dockerfile                      # Container definition
 ├── README.md                       # This file
 ├── .dockerignore
 ├── __init__.py
 ├── pyproject.toml
 ├── uv.lock
+├── tests/                          # Contains test files
 └── server/
     ├── __init__.py
     ├── app.py                      # FastAPI app (HTTP + WebSocket)
     ├── README.md                   # Web interface guide for human users
-    └── kessler_env_environment.py  # Core physics, reward logic, episode management
+    ├── kessler_env_environment.py  # Core physics, reward logic, episode management
+    └── judge.py                    # LLM-as-Judge maneuver evaluator (optional)
 ```
 
 ## Inference Script Requirements

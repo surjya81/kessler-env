@@ -28,6 +28,7 @@ Usage:
     python -m server.app
 """
 from dotenv import load_dotenv
+from fastapi.responses import JSONResponse
 load_dotenv()
 import os
 
@@ -61,6 +62,18 @@ app = create_app(
     max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
 )
 
+@app.get("/manifest.json")
+async def manifest():
+    return JSONResponse({
+        "name": "Kessler Env",
+        "short_name": "Kessler Env",
+        "description": "Orbital traffic control simulation environment",
+        "start_url": "/web",
+        "display": "standalone",
+        "background_color": "#0f0f1a",
+        "theme_color": "#6366f1",
+        "icons": []
+    })
 
 def main(host: str = "0.0.0.0", port: int = 8000):
     """
