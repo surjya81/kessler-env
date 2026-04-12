@@ -108,6 +108,7 @@ Desktop.ini
 # - .claude/commands/ (skill instructions)
 # - .claude/hooks/ (automation scripts)
 # - .claude/agents/ (subagent definitions)
+skills/
 
 # OpenEnv-specific
 # Environment outputs (logs, evaluations, etc.)
