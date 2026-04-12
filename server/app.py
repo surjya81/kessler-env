@@ -30,8 +30,12 @@ Usage:
 from dotenv import load_dotenv
 load_dotenv()
 import os
-print("ENABLE_WEB_INTERFACE =", os.getenv("ENABLE_WEB_INTERFACE"))
-print("Logger Level: ", os.getenv("LOG_LEVEL"))
+
+import sys
+print(f"ENABLE_WEB_INTERFACE={os.getenv('ENABLE_WEB_INTERFACE')}", file=sys.stderr)
+print(f"LOG_LEVEL={os.getenv('LOG_LEVEL')}", file=sys.stderr)
+print(f"ENABLE_JUDGE={os.getenv('ENABLE_JUDGE')}", file=sys.stderr)
+
 
 try:
     from openenv.core.env_server.http_server import create_app

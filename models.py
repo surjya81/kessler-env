@@ -7,7 +7,8 @@
 """
 Data models for the Kessler Env Environment.
 """
-from pydantic import BaseModel, Field
+import json
+from pydantic import BaseModel, Field, field_validator
 from typing import List
 from openenv.core.env_server.types import Action, Observation
 
@@ -24,7 +25,22 @@ class KesslerAction(Action):
         default_factory=list,
         description="List of thruster maneuvers to execute. Leave empty for no burns."
     )
-
+    # VALIDATOR FOR WEB INTERFACE COMPATIBILITY:
+    @field_validator('burns', mode='before')
+    def parse_burns_from_string(cls, v):
+        if isinstance(v, str):
+            try:
+                data = json.loads(v)
+                # If the UI wrapped it in {"action": {"burns": [...]}}
+                if isinstance(data, dict):
+                    if "action" in data:
+                        data = data["action"]
+                    if "burns" in data:
+                        return data["burns"]
+                return data
+            except json.JSONDecodeError:
+                raise ValueError("Input must be a valid JSON string representing a list of burns.")
+        return v
 
 class SatelliteTelemetry(BaseModel):
     id: int
