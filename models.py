@@ -6,8 +6,6 @@
 
 """
 Data models for the Kessler Env Environment.
-
-The kessler_env environment is a simple test environment that echoes back messages.
 """
 from pydantic import BaseModel, Field
 from typing import List
@@ -23,7 +21,7 @@ class ThrusterBurn(BaseModel):
 class KesslerAction(Action):
     """Action for the Kessler environment - assigning thruster burns to dodge debris."""
     burns: List[ThrusterBurn] = Field(
-        default_factory=list, 
+        default_factory=list,
         description="List of thruster maneuvers to execute. Leave empty for no burns."
     )
 
@@ -51,7 +49,21 @@ class KesslerObservation(Observation):
     mission_objective: str = Field(default="", description="The goal for the current episode")
     target_radius: float = Field(default=0.0, description="If greater than 0, navigate Sat 0 to this orbital radius")
     satellites: List[SatelliteTelemetry] = Field(..., description="Telemetry of your controlled satellites")
-    radar_debris: List[DebrisTelemetry] = Field(..., description="Tracked debris locations and velocities")
+    radar_debris: List[DebrisTelemetry] = Field(
+        ...,
+        description=(
+            "Debris within radar_range of at least one active satellite. "
+            "Objects outside this range are not visible — plan accordingly."
+        )
+    )
+    radar_range: float = Field(
+        default=0.0,
+        description=(
+            "Sensor horizon in position units. Only debris within this distance "
+            "of any active satellite appears in radar_debris. "
+            "0.0 means unlimited visibility (full observability mode)."
+        )
+    )
     critical_alerts: List[str] = Field(default_factory=list, description="Alerts such as collisions or low fuel")
     done: bool = False
     reward: float = 0.0

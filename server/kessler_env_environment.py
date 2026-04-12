@@ -1,5 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 import math
+import os
 import numpy as np
 import random
 from uuid import uuid4
@@ -26,6 +27,18 @@ COLLISION_DIST = 2.0
 EARTH_RADIUS = 20.0
 MAX_STEPS = 50       # Capped for 20-min hackathon inference limit
 NUM_SATELLITES = 3
+
+# --- Partial Observability ---
+# Debris is only visible to the agent if it falls within RADAR_RANGE position units
+# of at least one active satellite. Set RADAR_RANGE=0 (or unset the env var) to
+# restore full observability (all debris always visible — original behaviour).
+#
+# Recommended values:
+#   0.0  — full observability (default, backwards-compatible)
+#   35.0 — partial: tight cone, forces predictive burns
+#   50.0 — partial: moderate cone, good starting point for training
+_env_radar = os.getenv("RADAR_RANGE", "0")
+RADAR_RANGE: float = float(_env_radar) if _env_radar else 0.0
 
 # Epsilon used to keep per-episode score strictly inside (0, 1).
 # The environment adds this as a floor so that even a fully-destroyed run
@@ -248,11 +261,44 @@ class KesslerEnvironment(Environment):
         return obs
 
     def _get_observation(self, alerts: list) -> KesslerObservation:
+        """
+        Build the observation for the current step.
+
+        When RADAR_RANGE > 0 (partial observability), radar_debris is filtered
+        to only include debris within RADAR_RANGE units of at least one active
+        satellite. Debris outside that cone is invisible to the agent but still
+        exists in the simulation and can still cause collisions.
+
+        When RADAR_RANGE == 0 (default), all debris is returned — full
+        observability, preserving the original behaviour.
+        """
+        active_sats = [s for s in self.satellites if s["status"] == "active"]
+
+        if RADAR_RANGE > 0:
+            if not active_sats:
+                # No active satellites means no radar sensors — nothing visible.
+                visible_debris = []
+            else:
+                visible_debris = []
+                for d in self.debris:
+                    for s in active_sats:
+                        dist = math.sqrt((d["x"] - s["x"]) ** 2 + (d["y"] - s["y"]) ** 2)
+                        if dist <= RADAR_RANGE:
+                            visible_debris.append(d)
+                            break  # only one satellite needs to see it
+            logger.debug(
+                "_get_observation — radar_range=%.1f visible=%d/%d debris",
+                RADAR_RANGE, len(visible_debris), len(self.debris),
+            )
+        else:
+            visible_debris = self.debris
+
         return KesslerObservation(
             mission_objective=self.mission_objective,
             target_radius=self.target_radius,
             satellites=[SatelliteTelemetry(**s) for s in self.satellites],
-            radar_debris=[DebrisTelemetry(**d) for d in self.debris],
+            radar_debris=[DebrisTelemetry(**d) for d in visible_debris],
+            radar_range=RADAR_RANGE,
             critical_alerts=alerts,
             done=False,
             reward=0.0
